@@ -1,4 +1,9 @@
-import { recordIndexerPosition } from '../metrics.js';
+import {
+  recordIndexerEventDeadLettered,
+  recordIndexerEventProcessed,
+  recordIndexerEventsSkipped,
+  recordIndexerPosition,
+} from '../metrics.js';
 import { getLatestLedgerSequence, rpcServer } from '../stellar/rpc.js';
 import { getCheckpointState, saveCheckpoint } from './checkpoint.js';
 import { WATCHED_CONTRACT_IDS } from './contracts.js';
@@ -190,6 +195,7 @@ export async function pollOnce(handleEvent: EventHandler): Promise<void> {
       lastProcessedLedger = latestLedger;
       lastProcessedEventId = undefined;
       await saveCheckpoint(lastProcessedLedger);
+      recordIndexerEventsSkipped();
       return;
     }
 
@@ -218,6 +224,7 @@ export async function pollOnce(handleEvent: EventHandler): Promise<void> {
           err,
         );
         await recordDeadLetter(event, err);
+        recordIndexerEventDeadLettered();
       } else {
         console.error(
           `indexer: handler failed transiently for event ${event.id} at ledger ${event.ledger} — ` +
@@ -226,6 +233,8 @@ export async function pollOnce(handleEvent: EventHandler): Promise<void> {
         );
         throw err;
       }
+    } else {
+      recordIndexerEventProcessed();
     }
 
     // Saved per-event, not once per batch: several handlers apply relative
