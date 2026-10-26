@@ -17,6 +17,22 @@ export function _resetDeliveredEventIdsForTest(): void {
   deliveredEventIds.clear();
 }
 
+export function _deliveredEventIdCountForTest(): number {
+  return deliveredEventIds.size;
+}
+
+export const _MAX_DELIVERED_EVENT_IDS_FOR_TEST = MAX_DELIVERED_EVENT_IDS;
+
+/** Remembers a delivered event id, evicting the oldest ids past the cap. */
+function rememberDelivered(eventId: string): void {
+  deliveredEventIds.add(eventId);
+  while (deliveredEventIds.size > MAX_DELIVERED_EVENT_IDS) {
+    const oldest = deliveredEventIds.values().next().value;
+    if (oldest === undefined) break;
+    deliveredEventIds.delete(oldest);
+  }
+}
+
 /**
  * Header carrying a versioned HMAC-SHA256 of the timestamp, delivery ID,
  * and request body, keyed with `NOTIFY_WEBHOOK_SECRET`. See the
@@ -290,7 +306,7 @@ export async function notify(event: NotificationEvent): Promise<void> {
         where: { eventId: event.eventId, success: true },
       });
       if (persisted) {
-        deliveredEventIds.add(event.eventId);
+        rememberDelivered(event.eventId);
         return;
       }
     } catch (err) {
@@ -328,11 +344,7 @@ export async function notify(event: NotificationEvent): Promise<void> {
 
   // Mark delivered only after successful delivery
   if (event.eventId && webhookSuccess) {
-    deliveredEventIds.add(event.eventId);
-    if (deliveredEventIds.size > MAX_DELIVERED_EVENT_IDS) {
-      const oldest = deliveredEventIds.values().next().value;
-      if (oldest) deliveredEventIds.delete(oldest);
-    }
+    rememberDelivered(event.eventId);
 
     if (!process.env.NOTIFY_WEBHOOK_URL) {
       try {
